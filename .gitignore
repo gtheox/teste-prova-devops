@@ -1,0 +1,51 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+.flattened-pom.xml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+*.iws
+*.ipr
+
+# Build
+.gradle/
+build/
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+
+# Logs
+logs/
+*.log
+log4j.properties
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Spring Boot
+application-dev.yml
+application-prod.yml
+application-test.yml
+
+# Database
+*.db
+*.sqlite
+
+# Misc
+.classpath
+.project
+.settings/
+*.bak

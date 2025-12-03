@@ -1,0 +1,205 @@
+# ===============================================
+# PIPELINE CI/CD - GlobalSolution-SkillMatch
+# JAVA 17 + TESTES + WEB APP PAAS
+# ===============================================
+
+name: GlobalSolution-SkillMatch-CI-CD
+
+# Build deve ser acionado somente após Merge via PR (conforme requisito)
+# Requer Branch Protection na main para impedir push direto
+trigger:
+  - main
+
+pr:
+  - main
+  - feature/*
+
+pool:
+  name: 'Default'  # ← Agent Pool local
+
+variables:
+  AZURE_SUBSCRIPTION: 'azure-subscription'
+  RG: 'Globalsolution'
+  LOC: 'eastus2'
+  SQL_SERVER_NAME: 'skillmatch-sql'
+  SQL_DB_NAME: 'skillmatch-db'
+  APP_SERVICE_PLAN: 'skillmatch-plan'
+  WEBAPP_NAME: 'skillmatch-app'
+
+stages:
+  # ===============================================
+  # STAGE 1: BUILD + TESTES + PUBLISH ARTIFACT
+  # ===============================================
+  - stage: Build
+    displayName: 'Build, Test & Publish Artifact'
+    jobs:
+      - job: BuildAndTest
+        displayName: 'Compilar, Testar e Publicar'
+        steps:
+          
+          # --- CHECKOUT ---
+          - checkout: self
+            displayName: 'Checkout código'
+
+          # --- CHECK JAVA/MAVEN ---
+          - script: |
+              echo "JAVA:"
+              java -version
+              echo "MAVEN:"
+              mvn -version
+            displayName: 'Check Java & Maven'
+
+          # --- MAVEN BUILD + TESTES ---
+          - task: Maven@3
+            displayName: 'Maven: clean verify (com testes)'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'clean verify'
+              options: '-Dmaven.test.failure.ignore=false'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              codeCoverageToolOption: 'JaCoCo'
+
+          # --- PUBLISH ARTIFACT (JAR) ---
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publicar Artifact (JAR)'
+            condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+            inputs:
+              pathToPublish: '$(System.DefaultWorkingDirectory)/target/skillmatch-ai-1.0.0.jar'
+              artifactName: 'skillmatch-api'
+              publishLocation: 'Container'
+
+  # ===============================================
+  # STAGE 2: RELEASE - INFRA + APP
+  # ===============================================
+  - stage: Release
+    displayName: 'Deploy Infra + App (Web App PaaS)'
+    dependsOn: Build
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+
+      # --- JOB 0: CRIAR INFRA (RG + SQL + WEB APP) ---
+      - job: DeployInfra
+        displayName: '0. Criar Infra (RG + SQL + Web App)'
+        steps:
+          - checkout: self
+            displayName: 'Checkout código'
+            
+          - task: AzureCLI@2
+            displayName: 'Criar Infraestrutura'
+            inputs:
+              azureSubscription: $(AZURE_SUBSCRIPTION)
+              scriptType: 'ps'
+              scriptLocation: 'scriptPath'
+              scriptPath: '$(System.DefaultWorkingDirectory)/scripts/script-infra.ps1'
+              arguments: >
+                -ResourceGroup $(RG)
+                -Location $(LOC)
+                -SqlServerName $(SQL_SERVER_NAME)
+                -SqlDatabaseName $(SQL_DB_NAME)
+                -AppServicePlanName $(APP_SERVICE_PLAN)
+                -WebAppName $(WEBAPP_NAME)
+            env:
+              SQL_ADMIN_USER: $(SQL_ADMIN_USER)
+              SQL_ADMIN_PWD: $(SQL_ADMIN_PWD)
+              JWT_SECRET: $(JWT_SECRET)
+
+      # --- JOB 1: EXECUTAR SQL ---
+      - job: ExecuteSQL
+        displayName: '1. Criar Tabelas SQL Server'
+        dependsOn: DeployInfra
+        condition: succeeded()
+        steps:
+          - checkout: self
+            displayName: 'Checkout código'
+            
+          - task: AzureCLI@2
+            displayName: 'Executar Script SQL'
+            inputs:
+              azureSubscription: $(AZURE_SUBSCRIPTION)
+              scriptType: 'ps'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                Write-Host "Executando script SQL no Azure SQL Database..." -ForegroundColor Cyan
+                
+                $SQL_FILE = "$(System.DefaultWorkingDirectory)/scripts/script-bd.sql"
+                
+                if (-not (Test-Path $SQL_FILE)) {
+                  Write-Error "Arquivo SQL nao encontrado: $SQL_FILE"
+                  exit 1
+                }
+                
+                # Lê o conteúdo do SQL
+                $sqlContent = Get-Content -Path $SQL_FILE -Raw
+                
+                # Salva SQL em arquivo temporário
+                $tempSqlFile = "$env:TEMP\script_bd_temp.sql"
+                $sqlContent | Out-File -FilePath $tempSqlFile -Encoding UTF8
+                
+                Write-Host "Tentando executar SQL via sqlcmd..." -ForegroundColor Yellow
+                
+                # Tenta executar via sqlcmd (se disponível no agente)
+                $sqlServer = "$(SQL_SERVER_NAME).database.windows.net"
+                $sqlDatabase = "$(SQL_DB_NAME)"
+                $sqlUser = "$(SQL_ADMIN_USER)"
+                $sqlPass = "$(SQL_ADMIN_PWD)"
+                
+                # Verifica se sqlcmd está disponível
+                $sqlcmdPath = Get-Command sqlcmd -ErrorAction SilentlyContinue
+                
+                if ($sqlcmdPath) {
+                  Write-Host "sqlcmd encontrado. Executando script..." -ForegroundColor Green
+                  $env:SQLCMDPASSWORD = $sqlPass
+                  sqlcmd -S $sqlServer -d $sqlDatabase -U $sqlUser -i $tempSqlFile -C -l 30
+                  if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Script SQL executado com sucesso!" -ForegroundColor Green
+                  } else {
+                    Write-Warning "Falha ao executar SQL. Verifique os logs acima."
+                    exit 1
+                  }
+                  Remove-Item Env:\SQLCMDPASSWORD
+                } else {
+                  Write-Warning "sqlcmd nao esta disponivel no agente."
+                  Write-Host "OPCAO 1: Instale SQL Server Command Line Utilities no agente" -ForegroundColor Yellow
+                  Write-Host "OPCAO 2: Execute o script SQL manualmente via Azure Portal:" -ForegroundColor Yellow
+                  Write-Host "  - Acesse: https://portal.azure.com" -ForegroundColor Cyan
+                  Write-Host "  - Vá em SQL Database > $(SQL_DB_NAME) > Query editor" -ForegroundColor Cyan
+                  Write-Host "  - Cole o conteudo de: $tempSqlFile" -ForegroundColor Cyan
+                  Write-Host "OPCAO 3: Use Azure Data Studio ou SSMS para executar o script" -ForegroundColor Yellow
+                  Write-Host "Arquivo SQL salvo em: $tempSqlFile" -ForegroundColor Cyan
+                  # Não falha o pipeline, apenas avisa
+                  Write-Host "Continuando com o deploy (execute SQL manualmente se necessario)" -ForegroundColor Yellow
+                }
+            env:
+              SQL_ADMIN_USER: $(SQL_ADMIN_USER)
+              SQL_ADMIN_PWD: $(SQL_ADMIN_PWD)
+
+      # --- JOB 2: DEPLOY APP ---
+      - job: DeployApp
+        displayName: '2. Deploy Aplicação (Web App)'
+        dependsOn: 
+          - DeployInfra
+          - ExecuteSQL
+        condition: succeeded()
+        steps:
+          - checkout: self
+            displayName: 'Checkout código'
+            
+          - task: DownloadBuildArtifacts@0
+            displayName: 'Download Artifact'
+            inputs:
+              buildType: 'current'
+              downloadType: 'specific'
+              itemPattern: 'skillmatch-api/skillmatch-ai-1.0.0.jar'
+              downloadPath: '$(System.DefaultWorkingDirectory)/artifacts'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy para Azure Web App'
+            inputs:
+              azureSubscription: $(AZURE_SUBSCRIPTION)
+              appType: 'webApp'
+              appName: $(WEBAPP_NAME)
+              package: '$(System.DefaultWorkingDirectory)/artifacts/skillmatch-api/skillmatch-ai-1.0.0.jar'
+              deploymentMethod: 'auto'
+              runtimeStack: 'JAVA|17-java17'
+              startUpCommand: 'java -jar skillmatch-ai-1.0.0.jar'
