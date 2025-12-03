@@ -338,6 +338,38 @@ O pipeline do Azure DevOps executa automaticamente:
 3. Criação de infraestrutura no Azure (se necessário)
 4. Deploy da aplicação no Azure Web App
 
+### Configuração da Pipeline
+
+#### Pré-requisitos
+
+Antes de executar a pipeline, é necessário configurar:
+
+1. **Service Connection no Azure DevOps**
+   - Acesse: `Project Settings` > `Service connections` > `New service connection`
+   - Escolha: `Azure Resource Manager` > `Service principal (automatic)`
+   - Selecione sua subscription do Azure
+   - Dê o nome: `azure-subscription` (ou altere a variável `AZURE_SUBSCRIPTION` no arquivo `azure-pipeline.yml`)
+   - **IMPORTANTE**: Marque a opção "Grant access permission to all pipelines" para autorizar o uso
+   - Clique em `Save`
+
+2. **Variáveis de Pipeline (Opcional - se não usar Azure Key Vault)**
+   - Acesse: `Pipelines` > `Library` > `Variable groups` (ou configure variáveis na pipeline)
+   - Configure as seguintes variáveis:
+     - `SQL_ADMIN_USER`: Usuário administrador do SQL Server
+     - `SQL_ADMIN_PWD`: Senha do administrador do SQL Server
+     - `JWT_SECRET`: Chave secreta para JWT (se aplicável)
+
+   **OU** configure diretamente na pipeline:
+   - Vá em `Pipelines` > Selecione sua pipeline > `Edit` > `Variables`
+   - Adicione as variáveis necessárias marcando-as como `Secret` quando apropriado
+
+#### Troubleshooting
+
+**Erro: "service connection azure-subscription which could not be found"**
+- Verifique se a service connection foi criada com o nome exato `azure-subscription`
+- Verifique se a service connection está autorizada para uso em pipelines
+- Verifique se você tem permissões para usar a service connection
+
 ## Executar Localmente
 
 Pré-requisitos:

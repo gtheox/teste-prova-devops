@@ -15,10 +15,17 @@ pr:
   - feature/*
 
 pool:
-  name: 'Default'  # ← Agent Pool local
+  vmImage: 'windows-latest'  # ← Usa agentes Microsoft-hosted (Windows - necessário para PowerShell)
+  # Alternativas: 'windows-latest', 'macos-latest', 'ubuntu-latest'
 
 variables:
-  AZURE_SUBSCRIPTION: 'azure-subscription'
+  # IMPORTANTE: Configure a Service Connection no Azure DevOps antes de executar a pipeline
+  # 1. Vá em Project Settings > Service connections > New service connection
+  # 2. Escolha "Azure Resource Manager" > "Service principal (automatic)"
+  # 3. Configure a subscription e dê o nome "azure-subscription" (ou altere o valor abaixo)
+  # 4. Autorize a service connection para uso em todos os pipelines
+  # Mais detalhes: https://aka.ms/yamlauthz
+  AZURE_SUBSCRIPTION: 'azure-subscription'  # ← Nome da Service Connection criada no Azure DevOps
   RG: 'Globalsolution'
   LOC: 'eastus2'
   SQL_SERVER_NAME: 'skillmatch-sql'
