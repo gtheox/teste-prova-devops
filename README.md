@@ -30,6 +30,15 @@ A aplicação está hospedada no Azure Web App e utiliza Azure SQL Database para
 
 A API está disponível em: `https://skillmatch-app.azurewebsites.net/api`
 
+Nome1: SQL_ADMIN_USER
+Valor: sqladmin
+
+Nome2: SQL_ADMIN_PWD
+Valor: MinhaSenh@123!
+
+Nome3: JWT_SECRET
+Valor: skillmatch-jwt-secret-key-2024-global-solution-azure-devops-1234567890abcdefghijklmnopqrstuvwxyz
+
 ### Autenticação
 
 Usa Basic Authentication:
