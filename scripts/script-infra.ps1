@@ -31,10 +31,21 @@ Write-Host "===============================================" -ForegroundColor Cy
 $SQL_ADMIN_USER = $env:SQL_ADMIN_USER
 $SQL_ADMIN_PWD = $env:SQL_ADMIN_PWD
 
-if (-not $SQL_ADMIN_USER -or -not $SQL_ADMIN_PWD) {
-    Write-Error "ERRO: SQL_ADMIN_USER e SQL_ADMIN_PWD devem estar definidas!"
+# Validação melhorada - detecta se variáveis não foram definidas ou contêm placeholders do Azure DevOps
+if (-not $SQL_ADMIN_USER -or $SQL_ADMIN_USER -eq "" -or $SQL_ADMIN_USER -match '^\$\(.*\)$') {
+    Write-Error "ERRO: SQL_ADMIN_USER nao foi definida ou esta vazia!"
+    Write-Error "Configure a variavel SQL_ADMIN_USER na pipeline (Pipelines > Edit > Variables)"
     exit 1
 }
+
+if (-not $SQL_ADMIN_PWD -or $SQL_ADMIN_PWD -eq "" -or $SQL_ADMIN_PWD -match '^\$\(.*\)$') {
+    Write-Error "ERRO: SQL_ADMIN_PWD nao foi definida ou esta vazia!"
+    Write-Error "Configure a variavel SQL_ADMIN_PWD na pipeline (Pipelines > Edit > Variables) como SECRET"
+    exit 1
+}
+
+Write-Host "SQL_ADMIN_USER configurado: $($SQL_ADMIN_USER.Substring(0, [Math]::Min(3, $SQL_ADMIN_USER.Length)))..." -ForegroundColor Green
+Write-Host "SQL_ADMIN_PWD configurado: ***" -ForegroundColor Green
 
 # ===============================================
 # 1. RESOURCE GROUP (IDEMPOTENTE)
@@ -90,7 +101,16 @@ if (-not $sqlServerExists) {
     if ($exitCode -ne 0) {
         Write-Host "ERRO ao executar az sql server create:" -ForegroundColor Red
         Write-Host $output -ForegroundColor Red
-        Write-Error "Falha ao criar SQL Server! Exit code: $exitCode"
+        
+        # Verifica se o erro é de nome já existente
+        $outputString = $output -join " "
+        if ($outputString -match "NameAlreadyExists" -or $outputString -match "already exists") {
+            Write-Error "ERRO: O nome do SQL Server '$SqlServerName' ja existe no Azure (nomes devem ser unicos globalmente)."
+            Write-Host "SOLUCAO: Use um nome diferente na variavel SQL_SERVER_NAME da pipeline." -ForegroundColor Yellow
+            Write-Host "Exemplo: skillmatch-sql-$(Get-Random -Maximum 99999) ou skillmatch-sql-$(Get-Date -Format 'yyyyMMddHHmmss')" -ForegroundColor Cyan
+        } else {
+            Write-Error "Falha ao criar SQL Server! Exit code: $exitCode"
+        }
         exit 1
     }
     

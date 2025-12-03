@@ -351,17 +351,50 @@ Antes de executar a pipeline, é necessário configurar:
    - Dê o nome: `azure-subscription` (ou altere a variável `AZURE_SUBSCRIPTION` no arquivo `azure-pipeline.yml`)
    - **IMPORTANTE**: Marque a opção "Grant access permission to all pipelines" para autorizar o uso
    - Clique em `Save`
+   
+   **⚠️ IMPORTANTE - Dar Permissões no Azure:**
+   Após criar a service connection, você precisa dar permissões ao service principal no Azure:
+   - Acesse o [Azure Portal](https://portal.azure.com)
+   - Vá em `Subscriptions` > Selecione sua subscription
+   - Clique em `Access control (IAM)` no menu lateral
+   - Clique em `Add` > `Add role assignment`
+   - Role: Selecione `Contributor` (ou `Owner` se necessário)
+   - Assign access to: `User, group, or service principal`
+   - Select: Procure pelo nome da service connection (geralmente algo como "teste-devops-azure-subscription" ou similar)
+   - Clique em `Save`
+   
+   **OU via Azure CLI:**
+   ```bash
+   # Encontre o Object ID do service principal (está no erro da pipeline)
+   # Exemplo: a8767b20-2fc7-42a0-aa34-774c43cb84c0
+   az role assignment create \
+     --assignee <OBJECT_ID_DO_SERVICE_PRINCIPAL> \
+     --role "Contributor" \
+     --scope /subscriptions/<SUBSCRIPTION_ID>
+   ```
 
-2. **Variáveis de Pipeline (Opcional - se não usar Azure Key Vault)**
-   - Acesse: `Pipelines` > `Library` > `Variable groups` (ou configure variáveis na pipeline)
-   - Configure as seguintes variáveis:
-     - `SQL_ADMIN_USER`: Usuário administrador do SQL Server
-     - `SQL_ADMIN_PWD`: Senha do administrador do SQL Server
-     - `JWT_SECRET`: Chave secreta para JWT (se aplicável)
-
-   **OU** configure diretamente na pipeline:
-   - Vá em `Pipelines` > Selecione sua pipeline > `Edit` > `Variables`
-   - Adicione as variáveis necessárias marcando-as como `Secret` quando apropriado
+2. **Variáveis de Pipeline (OBRIGATÓRIAS)**
+   ⚠️ **IMPORTANTE**: Essas variáveis são obrigatórias para o deploy funcionar!
+   
+   Configure diretamente na pipeline:
+   - Vá em `Pipelines` > Selecione sua pipeline `GlobalSolution-SkillMatch-CI-CD` > `Edit`
+   - Clique no botão `Variables` no canto superior direito
+   - Clique em `+ Add` para adicionar cada variável:
+     - **Nome**: `SQL_ADMIN_USER`
+       - **Valor**: Um nome de usuário para o SQL Server (ex: `sqladmin`, `admin`, etc.)
+       - **Secret**: ❌ Não marque
+     - **Nome**: `SQL_ADMIN_PWD`
+       - **Valor**: Uma senha forte para o SQL Server (mínimo 8 caracteres, com maiúsculas, minúsculas, números e caracteres especiais)
+       - **Secret**: ✅ **MARQUE ESTA OPÇÃO** (para proteger a senha)
+     - **Nome**: `JWT_SECRET` (opcional, mas recomendado)
+       - **Valor**: Uma chave secreta para JWT (ex: uma string aleatória longa)
+       - **Secret**: ✅ Marque esta opção
+   - Clique em `Save` para salvar as variáveis
+   
+   **OU** configure via Variable Groups:
+   - Acesse: `Pipelines` > `Library` > `Variable groups` > `+ Variable group`
+   - Crie um grupo e adicione as mesmas variáveis acima
+   - Na pipeline, adicione a referência ao variable group no início do arquivo YAML
 
 #### Troubleshooting
 
@@ -369,6 +402,17 @@ Antes de executar a pipeline, é necessário configurar:
 - Verifique se a service connection foi criada com o nome exato `azure-subscription`
 - Verifique se a service connection está autorizada para uso em pipelines
 - Verifique se você tem permissões para usar a service connection
+
+**Erro: "AuthorizationFailed - does not have authorization to perform action 'Microsoft.Resources/subscriptions/resourceGroups/write'"**
+- O service principal não tem permissões suficientes no Azure
+- **Solução**: Siga as instruções acima em "⚠️ IMPORTANTE - Dar Permissões no Azure"
+- Dê a role `Contributor` ou `Owner` na subscription para o service principal
+- O Object ID do service principal aparece no log de erro da pipeline (ex: `a8767b20-2fc7-42a0-aa34-774c43cb84c0`)
+
+**Erro: "--admin-password was unexpected at this time" ou "SQL_ADMIN_USER e SQL_ADMIN_PWD devem estar definidas"**
+- As variáveis `SQL_ADMIN_USER` e `SQL_ADMIN_PWD` não foram configuradas na pipeline
+- **Solução**: Configure as variáveis obrigatórias seguindo as instruções acima em "2. Variáveis de Pipeline (OBRIGATÓRIAS)"
+- Certifique-se de que as variáveis estão configuradas e que `SQL_ADMIN_PWD` está marcada como `Secret`
 
 ## Executar Localmente
 

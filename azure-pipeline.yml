@@ -28,10 +28,12 @@ variables:
   AZURE_SUBSCRIPTION: 'azure-subscription'  # ← Nome da Service Connection criada no Azure DevOps
   RG: 'Globalsolution'
   LOC: 'eastus2'
-  SQL_SERVER_NAME: 'skillmatch-sql'
+  # SQL_SERVER_NAME e WEBAPP_NAME precisam ser únicos globalmente no Azure
+  # Usando sufixo aleatório para garantir unicidade
+  SQL_SERVER_NAME: 'skillmatch-sql-$(Build.BuildId)'
   SQL_DB_NAME: 'skillmatch-db'
   APP_SERVICE_PLAN: 'skillmatch-plan'
-  WEBAPP_NAME: 'skillmatch-app'
+  WEBAPP_NAME: 'skillmatch-app-$(Build.BuildId)'
 
 stages:
   # ===============================================
